@@ -264,8 +264,9 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
     // one asked for (board permission-mode-actual A1); before a run starts, what it starts in (C1). Never a guess made here.
     val startsNext = runStartsNext(detail, target != null)
     var modeTick by remember { mutableIntStateOf(0) }
-    val capsule = remember(detail, effective, shownEngine, state.catalog, target, modeTick) {
-        modeCapsule(detail, effective, shownEngine, state.catalog, target != null, modeClock())
+    val modeEvents = session?.transcript?.events.orEmpty()
+    val capsule = remember(detail, effective, shownEngine, state.catalog, target, modeTick, modeEvents) {
+        modeCapsule(detail, effective, shownEngine, state.catalog, target != null, modeClock(), modeEvents)
     }
     // Claude's report reads as being switched back for a minute; past that it is drawn again, as the gap it is.
     val correctingAt = PermissionModes.changes(detail).lastOrNull()?.at?.takeIf { capsule.gap == ModeCapsule.Gap.CORRECTING }

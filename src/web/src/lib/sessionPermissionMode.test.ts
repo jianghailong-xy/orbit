@@ -5,6 +5,7 @@ import {
   MODE_SWITCH_WINDOW_MS,
   modeCapsule,
   modeChangeLines,
+  modeCorrectionRefusals,
   type ModeFacts,
 } from './sessionPermissionMode';
 
@@ -201,5 +202,83 @@ describe('the transcript line for a mode change (B1), one per cause', () => {
     const changes = [change('ENGINE_REPORT', 'default', 'auto', '2026-11-27T09:00:00.000Z'), change('OWNER_PICK', 'plan', 'default', '2026-11-27T09:05:00.000Z', 'web')];
     expect(modeChangeLines(changes, { ...OPUS, intent: 'auto', actual: 'plan' }).map((l) => l.gap)).toEqual([false, true]);
     expect(modeChangeLines(changes, { ...OPUS, intent: 'auto', actual: null }).map((l) => l.gap)).toEqual([false, false]);
+  });
+});
+
+describe('a correction Claude refused (permission_mode_correction_failed)', () => {
+  const WORDS = 'Cannot set permission mode to auto: auto mode unavailable for this model';
+  const report = change('ENGINE_REPORT', 'default', 'auto', '2026-11-27T09:00:20.000Z');
+  const refusedEvent = (seq: number, ts: string) => ({
+    seq,
+    type: 'system',
+    ts,
+    payload: { subtype: 'permission_mode_correction_failed', mode: 'default', requested: 'auto', reason: WORDS },
+  });
+  const [refusal] = modeCorrectionRefusals([
+    { seq: 3, type: 'system', ts: '2026-11-27T09:00:19.000Z', payload: { subtype: 'agent_tools' } },
+    refusedEvent(4, '2026-11-27T09:00:21.000Z'),
+  ]);
+
+  it('is read off the conversation’s events, with the CLI’s words', () => {
+    expect(refusal).toEqual({ seq: 4, at: '2026-11-27T09:00:21.000Z', mode: 'default', requested: 'auto', reason: WORDS });
+  });
+
+  it('is a gap that lasts at once, never "switching", and says why in the CLI’s words', () => {
+    const capsule = modeCapsule({ ...OPUS, actual: 'default', latest: report, refusal, now: NOW });
+    expect(capsule).toMatchObject({ gap: 'lasting', label: 'Default', to: null, switchingUntil: null });
+    expect(capsule.reason).toEqual({
+      lead: 'Running in Default.',
+      rest: `You asked for Auto, but the runner couldn’t switch Claude to it: ${WORDS}.`,
+    });
+  });
+
+  it('ends with the next change: a correction that took, or the owner’s pick', () => {
+    const corrected = change('RUNNER_CORRECTION', 'auto', 'default', '2026-11-27T09:05:00.000Z');
+    expect(modeCapsule({ ...OPUS, actual: 'auto', latest: corrected, refusal, now: NOW }).gap).toBe('none');
+    const picked = change('OWNER_PICK', 'plan', 'default', '2026-11-27T09:05:00.000Z', 'web');
+    expect(modeCapsule({ ...OPUS, intent: 'plan', actual: 'plan', latest: picked, refusal, now: NOW }).gap).toBe('none');
+    // A re-spawn that came back below Auto again is a new attempt: switching, not the old refusal.
+    const respawn = change('RESPAWN', 'default', 'auto', '2026-11-27T09:20:00.000Z');
+    expect(modeCapsule({ ...OPUS, actual: 'default', latest: respawn, refusal, now: Date.parse('2026-11-27T09:20:05.000Z') }).gap).toBe('switching');
+  });
+
+  it('draws a line saying the runner could not switch it and why, amber while it stands', () => {
+    const changes = [change('CLAIM', 'auto', null, '2026-11-27T09:00:18.000Z'), report];
+    expect(said(modeChangeLines(changes, { ...OPUS, actual: 'default', refusals: [refusal!] }))).toEqual([
+      'Claude started in [Default]',
+      `Claude stays in [Default] — the runner couldn’t switch it to Auto: ${WORDS} (gap)`,
+    ]);
+    expect(modeChangeLines(changes, { ...OPUS, actual: 'default', refusals: [refusal!] }).at(-1)?.seq).toBe(4);
+    // Once the owner moved on, it is history: still said, no longer amber.
+    const later = [...changes, change('OWNER_PICK', 'default', 'default', '2026-11-27T09:10:00.000Z', 'web')];
+    expect(said(modeChangeLines(later, { ...OPUS, intent: 'default', actual: 'default', refusals: [refusal!] })).at(-1)).toBe(
+      `Claude stays in [Default] — the runner couldn’t switch it to Auto: ${WORDS}`,
+    );
+  });
+});
+
+describe('the claim’s line from the server’s requestedMode and reason', () => {
+  const claim = (reason: 'ROOT_RUNNER' | 'SCHEDULED_RUN', requestedMode: string, fromMode: string | null = null) => ({
+    ...change('CLAIM', 'auto', fromMode),
+    requestedMode,
+    reason,
+  });
+
+  it('ROOT_RUNNER names the mode asked for, whatever this client knows of the runner', () => {
+    expect(said(modeChangeLines([claim('ROOT_RUNNER', 'bypassPermissions')], { ...OPUS, intent: 'bypassPermissions', actual: 'auto' }))).toEqual([
+      'Started in [Auto], not Bypass — Bypass can’t run on a root runner (gap)',
+    ]);
+    expect(said(modeChangeLines([claim('ROOT_RUNNER', 'bypassPermissions', 'default')], { ...OPUS, intent: 'bypassPermissions', actual: 'auto' }))).toEqual([
+      'Resumed in [Auto], not Bypass — Bypass can’t run on a root runner (gap)',
+    ]);
+  });
+
+  it('SCHEDULED_RUN says scheduled runs always use Auto, even where this client does not know it is one', () => {
+    expect(said(modeChangeLines([claim('SCHEDULED_RUN', 'default')], { ...OPUS, intent: 'default', actual: 'auto' }))).toEqual([
+      'Started in [Auto] — scheduled runs always use Auto',
+    ]);
+    expect(said(modeChangeLines([claim('SCHEDULED_RUN', 'default')], { ...OPUS, intent: 'default', scheduled: true, actual: 'auto' }))).toEqual([
+      'Started in [Auto] — scheduled runs always use Auto',
+    ]);
   });
 });

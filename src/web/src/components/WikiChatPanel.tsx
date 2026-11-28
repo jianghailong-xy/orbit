@@ -84,7 +84,7 @@ import { meQuery, providersQuery, runnersQuery, sessionQuery, wikiChatHistoryQue
 import { returnsToComposer } from '../lib/queuedTurnRestore';
 import { engineTitleFor } from '../lib/sessionProviderChoices';
 import { outlivingSessionWork } from '../lib/sessionActivity';
-import { autoMenuNote } from '../lib/sessionPermissionMode';
+import { autoMenuNote, modeCorrectionRefusals, type ModeCorrectionRefusal } from '../lib/sessionPermissionMode';
 import { isSessionLive, isSessionTerminal, sessionRetryPending, sessionRunStateOf, sessionRunStatusOf } from '../lib/sessionState';
 import { defaultSessionTurnIntent } from '../lib/sessionTurnIntent';
 import { sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
@@ -663,7 +663,12 @@ function useChatToolbar({
   current: ChatConfig;
   codexSandboxUnavailable?: boolean;
   /** What the server recorded of a live chat's mode, and when this tab last picked one; absent for a new chat. */
-  recorded?: { actual?: string | null; latest?: SessionPermissionModeChange | null; pickedAt?: number | null };
+  recorded?: {
+    actual?: string | null;
+    latest?: SessionPermissionModeChange | null;
+    pickedAt?: number | null;
+    refusal?: ModeCorrectionRefusal | null;
+  };
   change: (next: ChatConfigChange) => void;
 }) {
   const qc = useQueryClient();
@@ -1344,6 +1349,8 @@ function WikiChatSession({
   // Only a live chat runs in a mode; an ended one's lines are no reason for a gap.
   const recordedMode = live ? session?.actualPermissionMode : null;
   const modeChanges = session?.deletedAt ? undefined : session?.permissionModeChanges;
+  // A correction Claude refused is a system event of the chat, not a mode change: read off the events loaded.
+  const modeRefusals = useMemo(() => modeCorrectionRefusals(stream.transcriptEvents), [stream.transcriptEvents]);
   const toolbar = useChatToolbar({
     engine,
     provider,
@@ -1352,7 +1359,7 @@ function WikiChatSession({
     resolved,
     current,
     codexSandboxUnavailable: session?.codexSandboxUnavailable,
-    recorded: { actual: recordedMode, latest: modeChanges?.at(-1) ?? null, pickedAt: modePickedAt },
+    recorded: { actual: recordedMode, latest: modeChanges?.at(-1) ?? null, pickedAt: modePickedAt, refusal: modeRefusals.at(-1) ?? null },
     change: (config) => configMut.mutate(config),
   });
   const online = runner?.online ?? false;
@@ -1587,12 +1594,12 @@ function WikiChatSession({
       ...(modeChanges
         ? modeChangeInserts(
             modeChanges,
-            { intent, actual: recordedMode, engine, modelHasAuto, modelLabel, runsAsRoot },
+            { intent, actual: recordedMode, engine, modelHasAuto, modelLabel, runsAsRoot, refusals: modeRefusals },
             stream.transcriptEvents,
           )
         : []),
     ],
-    [driveCards.inserts, modeChanges, intent, recordedMode, engine, modelHasAuto, modelLabel, runsAsRoot, stream.transcriptEvents],
+    [driveCards.inserts, modeChanges, intent, recordedMode, engine, modelHasAuto, modelLabel, runsAsRoot, modeRefusals, stream.transcriptEvents],
   );
 
   // The card the chat was opened at: one named, or the first that needs the owner (design §3).

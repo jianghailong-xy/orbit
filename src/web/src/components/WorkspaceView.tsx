@@ -582,6 +582,7 @@ import { ModeCapsuleValue, ModeOptionLabel, ModeReason, useModeCapsule } from '.
 import {
   autoMenuNote,
   type ModeCapsule,
+  modeCorrectionRefusals,
 } from '../lib/sessionPermissionMode';
 import { usePermissionModeChangeHistory } from '../lib/permissionModeChangeHistory';
 import type {
@@ -6786,6 +6787,8 @@ export function WorkspaceView({
     oldestEventTs: transcriptEvents[0]?.ts,
     reachesStart: transcriptEvents.length > 0 && !hasOlderNow(),
   });
+  // A correction Claude refused is a system event of the conversation, not a mode change: read off the events loaded.
+  const permissionModeRefusals = useMemo(() => modeCorrectionRefusals(transcriptEvents), [transcriptEvents]);
   // The list row learns of a new mode before the detail, whose changes the lines are read from: read it again.
   const rowModeAt = (selected as RecordedMode | null)?.actualPermissionModeAt ?? null;
   const detailModeAt = detailForSelected?.actualPermissionModeAt ?? null;
@@ -6818,11 +6821,13 @@ export function WorkspaceView({
               modelLabel: lineModelLabel,
               runsAsRoot: runner.runsAsRoot,
               scheduled: isScheduleRun,
+              refusals: permissionModeRefusals,
             },
             transcriptEvents,
           ),
     [
       effectivePermissionMode,
+      permissionModeRefusals,
       isScheduleRun,
       lineModelHasAuto,
       lineModelLabel,
@@ -10738,6 +10743,7 @@ export function WorkspaceView({
     actual: recordedPermissionMode,
     latest: permissionModeChanges?.at(-1) ?? null,
     pickedAt: modePickedAt?.sessionId === selectedId ? modePickedAt.at : null,
+    refusal: permissionModeRefusals.at(-1) ?? null,
   });
   // Auto stays selectable on a model with no Auto, and its row says what the session does instead (C1).
   const autoModeNote = autoMenuNote(shownModeFacts, !!recordedPermissionMode);

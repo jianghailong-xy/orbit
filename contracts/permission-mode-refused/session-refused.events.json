@@ -1,0 +1,218 @@
+{
+  "hasMore": false,
+  "events": [
+    {
+      "seq": 1,
+      "type": "user",
+      "payload": {
+        "text": "Reply with the single word: ready. Do not use any tools.",
+        "delivery": "enqueued"
+      },
+      "turnId": "3KV1p4rhNMBYleXHNXSWif",
+      "ts": "2026-11-28T06:32:40.429Z",
+      "turnPublicId": "3KV1p4rhNMBYleXHNXSWif"
+    },
+    {
+      "seq": 2,
+      "type": "user_delivery",
+      "payload": {
+        "turnId": "3KV1p4rhNMBYleXHNXSWif",
+        "delivery": "written",
+        "turnPublicId": "3KV1p4rhNMBYleXHNXSWif"
+      },
+      "turnId": "3KV1p4rhNMBYleXHNXSWif",
+      "ts": "2026-11-28T06:32:40.429Z",
+      "turnPublicId": "3KV1p4rhNMBYleXHNXSWif"
+    },
+    {
+      "seq": 3,
+      "type": "system",
+      "payload": {
+        "model": "claude-haiku-4-5",
+        "subtype": "init",
+        "sessionId": "3sJ4rRXjyPzbrB3Lpe32uA",
+        "sessionPublicId": "3sJ4rRXjyPzbrB3Lpe32uA"
+      },
+      "turnId": "3KV1p4rhNMBYleXHNXSWif",
+      "ts": "2026-11-28T06:32:40.430Z",
+      "turnPublicId": "3KV1p4rhNMBYleXHNXSWif"
+    },
+    {
+      "seq": 4,
+      "type": "system",
+      "payload": {
+        "subtype": "agent_tools",
+        "agentTools": {
+          "v": 1,
+          "at": "2026-11-28T06:32:40Z",
+          "mcp": {
+            "tools": 0,
+            "status": "not_configured"
+          },
+          "skill": {
+            "name": "orbit:playbooks",
+            "reason": "Claude Code 0.0.0 is older than 2.1.325, the first version Orbit gives the playbooks to.",
+            "offered": false
+          },
+          "engine": "claude",
+          "families": [
+            {
+              "id": "tasks",
+              "total": 21,
+              "reason": "not_connected",
+              "served": 0
+            },
+            {
+              "id": "projects",
+              "total": 21,
+              "reason": "not_connected",
+              "served": 0
+            },
+            {
+              "id": "task-lists",
+              "total": 6,
+              "reason": "not_connected",
+              "served": 0
+            },
+            {
+              "id": "schedules",
+              "total": 11,
+              "reason": "not_connected",
+              "served": 0
+            },
+            {
+              "id": "waits",
+              "total": 6,
+              "reason": "not_connected",
+              "served": 0
+            },
+            {
+              "id": "files",
+              "total": 10,
+              "reason": "not_connected",
+              "served": 0
+            },
+            {
+              "id": "subagents",
+              "total": 1,
+              "reason": "not_connected",
+              "served": 0
+            },
+            {
+              "id": "background",
+              "total": 5,
+              "reason": "not_connected",
+              "served": 0
+            },
+            {
+              "id": "owner",
+              "total": 8,
+              "reason": "not_connected",
+              "served": 0
+            },
+            {
+              "id": "wiki",
+              "total": 6,
+              "reason": "not_connected",
+              "served": 0
+            },
+            {
+              "id": "providers",
+              "total": 4,
+              "reason": "not_connected",
+              "served": 0
+            },
+            {
+              "id": "merge-receipts",
+              "total": 3,
+              "reason": "not_connected",
+              "served": 0
+            },
+            {
+              "id": "guide",
+              "total": 1,
+              "reason": "not_connected",
+              "served": 0
+            },
+            {
+              "id": "orchestration",
+              "total": 23,
+              "reason": "not_connected",
+              "served": 0
+            }
+          ],
+          "switches": {
+            "wiki": true,
+            "browser": false,
+            "watches": true,
+            "documentsOff": true,
+            "orchestration": true
+          },
+          "versions": {
+            "guide": "1.1.0",
+            "primer": "1.8.1",
+            "catalog": "1.12.0",
+            "contract": "1.15.0",
+            "playbooks": "1.0.0"
+          },
+          "instructions": {
+            "carrier": "append_system_prompt"
+          },
+          "runnerVersion": "dev",
+          "permissionMode": "default"
+        }
+      },
+      "turnId": "3KV1p4rhNMBYleXHNXSWif",
+      "ts": "2026-11-28T06:32:40.437Z",
+      "turnPublicId": "3KV1p4rhNMBYleXHNXSWif"
+    },
+    {
+      "seq": 5,
+      "type": "user_delivery",
+      "payload": {
+        "turnId": "3KV1p4rhNMBYleXHNXSWif",
+        "delivery": "acknowledged",
+        "turnPublicId": "3KV1p4rhNMBYleXHNXSWif"
+      },
+      "turnId": "3KV1p4rhNMBYleXHNXSWif",
+      "ts": "2026-11-28T06:32:40.437Z",
+      "turnPublicId": "3KV1p4rhNMBYleXHNXSWif"
+    },
+    {
+      "seq": 6,
+      "type": "assistant",
+      "payload": {
+        "text": "The index on sessions is healthy: 0 bloat, last vacuum 2 h ago."
+      },
+      "turnId": "3KV1p4rhNMBYleXHNXSWif",
+      "ts": "2026-11-28T06:32:40.438Z",
+      "turnPublicId": "3KV1p4rhNMBYleXHNXSWif"
+    },
+    {
+      "seq": 7,
+      "type": "system",
+      "payload": {
+        "mode": "default",
+        "reason": "Cannot set permission mode to auto: auto mode unavailable for this model",
+        "subtype": "permission_mode_correction_failed",
+        "requested": "auto"
+      },
+      "turnId": "3KV1p4rhNMBYleXHNXSWif",
+      "ts": "2026-11-28T06:32:40.438Z",
+      "turnPublicId": "3KV1p4rhNMBYleXHNXSWif"
+    },
+    {
+      "seq": 8,
+      "type": "turn_end",
+      "payload": {
+        "costUsd": 0,
+        "subtype": "success",
+        "numTurns": 1,
+        "contextTokens": 0
+      },
+      "turnId": "3KV1p4rhNMBYleXHNXSWif",
+      "ts": "2026-11-28T06:32:40.444Z",
+      "turnPublicId": "3KV1p4rhNMBYleXHNXSWif"
+    }
+  ]
+}

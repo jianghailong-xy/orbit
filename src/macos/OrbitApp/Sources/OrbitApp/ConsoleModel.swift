@@ -540,6 +540,9 @@ final class ConsoleModel {
     private var actualPermissionMode: String?
     private var actualPermissionModeAt: String?
     private var permissionModeChanges: [SessionPermissionModeChange] = []
+    /// The corrections Claude refused, oldest first: system events of the conversation, not mode changes, so
+    /// they are read off the events this console loads (`noteModeRefusals`).
+    private var permissionModeRefusals: [PermissionModeRefusal] = []
     /// The changes held as far back as the transcript is loaded: the detail's newest and the older pages read as it pages
     /// back (`ModeChangeHistory`). `permissionModeChanges` is its list.
     @ObservationIgnored private var modeHistory = ModeChangeHistory()
@@ -551,7 +554,18 @@ final class ConsoleModel {
                            beforeStart: isDraft || sessionStatus == .pending,
                            latestChange: permissionModeChanges.last,
                            runsAsRoot: runnerRunsAsRoot == true,
-                           autoStartsInDefault: autoStartHint != nil)
+                           autoStartsInDefault: autoStartHint != nil,
+                           refusal: permissionModeRefusals.last)
+    }
+
+    /// Keep every refused correction among `events` (pages and the live stream alike), once each.
+    private func noteModeRefusals(_ events: [RunEvent]) {
+        let found = events.compactMap(PermissionModeRefusal.init(event:))
+        guard !found.isEmpty else { return }
+        let known = Set(permissionModeRefusals.map(\.seq))
+        let fresh = found.filter { !known.contains($0.seq) }
+        guard !fresh.isEmpty else { return }
+        permissionModeRefusals = (permissionModeRefusals + fresh).sorted { $0.seq < $1.seq }
     }
 
     var autoStartHint: String? {
@@ -560,14 +574,31 @@ final class ConsoleModel {
     }
 
     var permissionModeCards: [DeliveredDecisionCard] {
-        permissionModeChanges.map {
-            DeliveredDecisionCard(kind: .permissionModeChange($0), placement: .at($0.at))
+        // The report a refusal answers is placed at the refusal's moment, just before it (`answeredChange`).
+        var placedAt: [Int: String] = [:]
+        for refusal in permissionModeRefusals {
+            if let i = refusal.answeredChange(in: permissionModeChanges) { placedAt[i] = refusal.at }
+        }
+        return permissionModeChanges.enumerated().map { i, change in
+            DeliveredDecisionCard(kind: .permissionModeChange(change), placement: .at(placedAt[i] ?? change.at))
+        } + permissionModeRefusals.map {
+            DeliveredDecisionCard(kind: .permissionModeRefusal($0), placement: .at($0.at))
         }
     }
 
-    func modeChangeShowsGap(_ change: SessionPermissionModeChange) -> Bool {
-        change == permissionModeChanges.last && change.toMode == actualPermissionMode && modeDisplay.reason != nil
+    /// The refusal that is the gap the mode control shows now, if one is.
+    private var standingRefusal: PermissionModeRefusal? {
+        guard let refusal = permissionModeRefusals.last, permissionMode.rawValue != actualPermissionMode,
+              refusal.stands(latest: permissionModeChanges.last, actual: actualPermissionMode) else { return nil }
+        return refusal
     }
+
+    func modeChangeShowsGap(_ change: SessionPermissionModeChange) -> Bool {
+        standingRefusal == nil && change == permissionModeChanges.last && change.toMode == actualPermissionMode
+            && modeDisplay.reason != nil
+    }
+
+    func modeRefusalShowsGap(_ refusal: PermissionModeRefusal) -> Bool { refusal == standingRefusal }
     /// True once the user picks a Mode themselves. Only an edited pick is remembered as the account
     /// default (web parity — `modeWasEdited`): the untouched seed is the app floor, and writing that
     /// back would erase what Settings actually asked for.
@@ -1729,6 +1760,7 @@ final class ConsoleModel {
                                 }
                             }
                             foldQueuedBackIntoComposer(before: ev)   // salvage queued text before an interrupt drops it
+                            noteModeRefusals([ev])
                             reducer.apply(ev)
                             scheduleStatePublish()
                             reconnectPolicy.noteHealthy()   // a healthy connection resets the backoff ramp
@@ -1796,6 +1828,7 @@ final class ConsoleModel {
             if Task.isCancelled { return }
             if let page = try? await api.eventPage(sessionID: sessionID, tail: Self.tailPage,
                                                    timeout: Self.pageTimeout) {
+                noteModeRefusals(page.events)
                 reducer.applyTailPage(page)   // also records the scroll-up window cursor (hasMoreOlder)
                 publishStateNow()
                 loadOlderPermissionModesIfNeeded()
@@ -1829,6 +1862,7 @@ final class ConsoleModel {
             await replaceWindow()
             return
         }
+        noteModeRefusals(page.events)
         reducer.appendNewer(page)
         publishStateNow()
     }
@@ -1870,6 +1904,7 @@ final class ConsoleModel {
             // the transcript. The stream task bails for the same reason; this is the coarser of the
             // two, and the check-then-fold below cannot interleave with anything.
             if Task.isCancelled || detached { return }
+            noteModeRefusals(page.events)
             reducer.appendNewer(page)   // folds exactly as the live stream would (it is `after=` data)
             publishStateNow()
             guard let next = page.after else { return }   // this page reached the newest event
@@ -2121,6 +2156,7 @@ final class ConsoleModel {
         guard let page = try? await api.eventPage(sessionID: sessionID,
                                                   before: before, limit: Self.olderPage) else { return }
         let anchor = reducer.state.items.first?.id
+        noteModeRefusals(page.events)
         reducer.prependOlder(page)
         // Re-pin only when rows actually grew above the old first row (id unchanged ⇒ nothing
         // prepended — e.g. the cursor hit the start — and yanking the scroll would be wrong).
@@ -2189,6 +2225,7 @@ final class ConsoleModel {
         // still in flight cannot fold live events onto the end of a window they do not follow.
         newerCursor = page.after
         reconnectNow()
+        noteModeRefusals(page.events)
         reducer.applyRecordPage(page)
         publishStateNow()
         loadOlderPermissionModesIfNeeded()
@@ -2319,6 +2356,7 @@ final class ConsoleModel {
         guard let page = try? await api.eventPageAfter(sessionID: sessionID, after: after,
                                                        limit: Self.olderPage),
               !jumpingToLatest, newerCursor == after else { return }
+        noteModeRefusals(page.events)
         reducer.appendNewer(page)
         newerCursor = page.after
         publishStateNow()
@@ -5404,7 +5442,8 @@ final class ConsoleModel {
             case .scheduleCard(let requestID):
                 // Create or Allow on the card itself, by pressing.
                 return waiting(scheduleCard(requestID)?.isPending == true, question: false)
-            case .scheduleRecord, .scheduleChangeOpening, .scheduleRunStrip, .scheduleRunReport, .permissionModeChange:
+            case .scheduleRecord, .scheduleChangeOpening, .scheduleRunStrip, .scheduleRunReport, .permissionModeChange,
+                 .permissionModeRefusal:
                 return nil
             }
         }

@@ -275,6 +275,42 @@ class PermissionModeShellTest : ComposerShellTest() {
         shot("08-draft-no-auto-model-menu")
     }
 
+    // A correction Claude refused, and the claim's substitution, from contracts/permission-mode-refused.
+
+    private val words = "Cannot set permission mode to auto: auto mode unavailable for this model"
+
+    /** The refused session as the server answered it, on the runner that ran it, with its events as the server paged them. */
+    @Test fun aRefusedCorrectionIsAGapThatStandsWithTheCliWordsAndItsLine() {
+        ComposerShell.runner = RefusedPayloads.runner("pmcf-runner")
+        ComposerShell.session = RefusedPayloads.session("refused.android")
+        ComposerShell.events = RefusedPayloads.events("refused.events")
+        // Read long after: the gap does not wait out a window, and it does not end with one either.
+        modeClock = { Instant.parse(PermissionModes.changes(RefusedPayloads.detail("refused.android")).last().at).plusSeconds(600) }
+        signIn(); openSession()
+        await { has(hasTestTag("composer-mode") and hasText("Default")) }
+        compose.onNodeWithTag("composer-mode-gap", useUnmergedTree = true).assertExists()
+        assertFalse(has(hasTestTag("composer-mode-correcting"), unmerged = true))
+        await { has(hasText("Claude stays in Default — the runner couldn’t switch it to Auto: $words")) }
+        val report = top("permission-mode:${PermissionModes.changes(RefusedPayloads.detail("refused.android"))[1].let { "${it.at}:${it.cause}:${it.toMode}" }}")
+        assertTrue("the report goes just before the refusal that answers it", report < top("permission-mode-refused:7"))
+        shot("11-refused")
+        openModeMenu()
+        compose.onNodeWithTag("composer-mode-head").assertTextEquals("Running in Default. You asked for Auto, but the runner couldn’t switch " +
+            "Claude to it: $words.")
+        item("auto").assertTextContains("✓", substring = true)
+        shot("11-refused-menu")
+    }
+
+    @Test fun theClaimLineIsWordedFromTheServersRequestedModeAndReason() {
+        ComposerShell.runner = RefusedPayloads.runner("root-runner")
+        ComposerShell.session = RefusedPayloads.session("root-claim.android")
+        ComposerShell.events = RefusedPayloads.events("root-claim.events")
+        signIn(); openSession()
+        await { has(hasTestTag("composer-mode") and hasText("Auto")) }
+        await { has(hasText("Started in Auto, not Bypass — Bypass can’t run on a root runner")) }
+        shot("12-root-claim")
+    }
+
     /** The windows on screen, bottom first: the Activity's, then a menu's over it. */
     private fun windows(): List<View> {
         val global = Class.forName("android.view.WindowManagerGlobal")

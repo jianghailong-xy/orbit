@@ -1,16 +1,17 @@
 import type { SessionPermissionModeChange } from '@orbit/shared';
 import { decisionReceiptAnchor } from '../lib/decisionReceipt';
-import { modeChangeLines, type ModeChangeLine, type ModeFacts } from '../lib/sessionPermissionMode';
+import { modeChangeLines, type ModeChangeLine, type ModeCorrectionRefusal, type ModeFacts } from '../lib/sessionPermissionMode';
 import type { TranscriptInsert } from './Transcript';
 
 /** The mode-change lines as a conversation's inserts, each drawn where it happened among the events loaded. */
 export function modeChangeInserts(
   changes: readonly SessionPermissionModeChange[],
-  facts: ModeFacts & { actual?: string | null },
+  facts: ModeFacts & { actual?: string | null; refusals?: readonly ModeCorrectionRefusal[] },
   events: Parameters<typeof decisionReceiptAnchor>[0],
 ): TranscriptInsert[] {
   return modeChangeLines(changes, facts).flatMap((line) => {
-    const anchor = decisionReceiptAnchor(events, line.at);
+    // A refused correction is an event of the conversation: its line goes where that event is.
+    const anchor = line.seq ?? decisionReceiptAnchor(events, line.at);
     return anchor === null
       ? []
       : [{ anchor, moment: line.at, key: `mode-change:${line.key}`, element: <PermissionModeLine line={line} /> }];

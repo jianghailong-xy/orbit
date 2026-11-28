@@ -2,6 +2,7 @@ package io.orbitd.android.core.cards
 
 import io.orbitd.android.core.cards.ModeCapsule.Gap
 import io.orbitd.android.core.protocol.PermissionModeChange
+import io.orbitd.android.core.protocol.PermissionModeRefusal
 import java.time.Instant
 import org.junit.Assert.*
 import org.junit.Test
@@ -197,5 +198,51 @@ class PermissionModeDisplayTest {
             .map { at -> ModeLine("k$at", at, "Mode set to ", "Auto", "", false) }
         val placed = PermissionModeDisplay.place(rows, listOf(first, second, third, unread))
         assertEquals(mapOf(-1 to listOf(first), 0 to listOf(second), 2 to listOf(third)), placed)
+    }
+
+    // A correction Claude refused (permission_mode_correction_failed): a gap that stands at once, in the CLI's words.
+
+    private val words = "Cannot set permission mode to auto: auto mode unavailable for this model"
+    private val report = change("auto", "default", "ENGINE_REPORT", at = "2026-11-22T12:00:05.000Z")
+    private val refusal = PermissionModeRefusal(7, "2026-11-22T12:00:06.000Z", "default", "auto", words)
+
+    @Test fun aRefusedCorrectionStandsAtOnceWithTheCliWordsAndNeverReadsAsSwitching() {
+        val shown = PermissionModeDisplay.capsule("auto", "default", true, false, report, null, false, false, now, refusal)
+        assertEquals(ModeCapsule("Default", Gap.STANDING, ModeCapsule.Head("Running in Default.",
+            "You asked for Auto, but the runner couldn’t switch Claude to it: $words.")), shown)
+        assertEquals("Default", shown.spoken)
+    }
+
+    @Test fun theNextChangeEndsTheRefusal() {
+        val corrected = change("default", "auto", "RUNNER_CORRECTION", at = "2026-11-22T12:05:00.000Z")
+        assertEquals(ModeCapsule("Auto"), PermissionModeDisplay.capsule("auto", "auto", true, false, corrected, null, false, false, now, refusal))
+        // A re-spawn that comes back below Auto again is a new attempt, read as being switched back.
+        val respawn = change("auto", "default", "RESPAWN", at = "2026-11-22T12:20:00.000Z")
+        assertEquals(Gap.CORRECTING, PermissionModeDisplay.capsule("auto", "default", true, false, respawn, null, false, false,
+            Instant.parse("2026-11-22T12:20:05.000Z"), refusal).gap)
+    }
+
+    @Test fun theTranscriptSaysTheRunnerCouldNotSwitchItAndWhy() {
+        val said = PermissionModeDisplay.lines(listOf(change(null, "auto", "CLAIM", at = "2026-11-22T12:00:04.000Z"), report), "auto",
+            "default", null, false, false, listOf(refusal))
+        assertEquals(listOf("Started in Auto", "Claude started in Default",
+            "Claude stays in Default — the runner couldn’t switch it to Auto: $words"), said.map { it.text })
+        // The refusal is the gap's line now; the report it answers is said plainly.
+        assertEquals(listOf(false, false, true), said.map { it.gap })
+        assertEquals("2026-11-22T12:00:06.000Z", said.last().at)
+        // History once the owner moved on: still said, no longer amber.
+        val later = PermissionModeDisplay.lines(listOf(report, change("default", "plan", "OWNER_PICK", "android", at = "2026-11-22T12:09:00.000Z")),
+            "plan", "plan", null, false, false, listOf(refusal))
+        assertFalse(later.last().gap)
+    }
+
+    @Test fun theClaimLineIsWordedFromTheServersRequestedModeAndReason() {
+        val root = PermissionModeChange(null, "auto", "CLAIM", null, "2026-11-22T12:00:00.000Z", requestedMode = "bypassPermissions", reason = "ROOT_RUNNER")
+        // Said even where this client does not know the runner runs as root.
+        assertEquals("Started in Auto, not Bypass — Bypass can’t run on a root runner",
+            PermissionModeDisplay.lines(listOf(root), "bypassPermissions", "auto", null, false, false).single().text)
+        val scheduled = PermissionModeChange("default", "auto", "CLAIM", null, "2026-11-22T12:00:00.000Z", requestedMode = "default", reason = "SCHEDULED_RUN")
+        assertEquals("Resumed in Auto — scheduled runs always use Auto",
+            PermissionModeDisplay.lines(listOf(scheduled), "default", "auto", null, false, true).single().text)
     }
 }

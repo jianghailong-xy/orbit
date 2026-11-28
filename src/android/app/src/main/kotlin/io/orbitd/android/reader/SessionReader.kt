@@ -452,8 +452,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         // Silent: the next page the window loads asks again.
         } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { }
     }
-    val permissionModeLines = remember(snapshotDetail, heldModes.changes, composerState.catalog) {
-        modeLines(snapshotDetail, heldModes.changes, composerState.catalog)
+    val permissionModeLines = remember(snapshotDetail, heldModes.changes, composerState.catalog, state.window.events) {
+        modeLines(snapshotDetail, heldModes.changes, composerState.catalog, state.window.events)
     }
     val drawSchedule: @Composable (ScheduleInsert) -> Unit = { insert ->
         key(insert.key) { Box(Modifier.conversationCard()) {
