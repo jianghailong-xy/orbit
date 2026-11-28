@@ -13819,7 +13819,7 @@ export function SessionComposer({
   // session at itself.
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionDismissed, setMentionDismissed] = useState<string | null>(null);
-  const mentionToken = referenceToken(text, '@');
+  const mentionToken = referenceToken(text, '@', composerRefs);
   const mentionSearchQ = useQuery({
     ...sessionSearchQuery(mentionToken?.trim() ?? ''),
     enabled: mentionToken !== null && !composerDisabled,
@@ -13861,7 +13861,7 @@ export function SessionComposer({
   // caret aligned with it.
   const [refIndex, setRefIndex] = useState(0);
   const [refDismissed, setRefDismissed] = useState<string | null>(null);
-  const refToken = referenceToken(text);
+  const refToken = referenceToken(text, '#', composerRefs);
   const refProjectsQ = useQuery({
     ...openProjectsQuery(),
     // Only once the user reaches for the menu: most drafts never contain a reference.

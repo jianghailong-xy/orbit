@@ -222,3 +222,20 @@ describe('chipDeletionRange', () => {
     expect(chipDeletionRange('see @Deploy mai why', picked, 15, 'Backspace')).toBeNull();
   });
 });
+
+describe('referenceToken after a pick', () => {
+  const picked: ReferenceMap = { 'Upgrade jerry deployment': { kind: 'session', id: 'S1' } };
+
+  it('reads no query once the trailing text is a picked chip, with or without words after it', () => {
+    expect(referenceToken('@Upgrade jerry deployment ', '@', picked)).toBeNull();
+    expect(referenceToken('see @Upgrade jerry deployment why is it', '@', picked)).toBeNull();
+  });
+
+  it('still reads a query typed after the chip with its own sigil', () => {
+    expect(referenceToken('@Upgrade jerry deployment and @dep', '@', picked)).toBe('dep');
+  });
+
+  it('does not take a # project title for an @ session chip', () => {
+    expect(referenceToken('#Upgrade jerry deployment', '#', picked)).toBe('Upgrade jerry deployment');
+  });
+});

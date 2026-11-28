@@ -147,12 +147,22 @@ export function applyReferencePick(
 }
 
 /** The `#` (or `@`) query being typed at the caret, or null when the menu should stay closed. */
-export function referenceToken(text: string, sigil: ReferenceSigil = '#'): string | null {
+export function referenceToken(
+  text: string,
+  sigil: ReferenceSigil = '#',
+  refs: ReferenceMap = {},
+): string | null {
   // Anything up to the end of the line: titles contain spaces, so stopping at the first one
   // would make every multi-word title unsearchable past its first word.
   // Stops at an earlier sigil for the same reason applyReferencePick does — the two must agree
   // on where the query starts or the pick replaces a different span than the menu searched.
-  return queryRe(sigil).exec(text)?.[2] ?? null;
+  const token = queryRe(sigil).exec(text)?.[2] ?? null;
+  if (token === null) return null;
+  // A sigil followed by a title already picked under it is that chip, not a query: without this the
+  // pick's own `@<title> ` reads as a new search, and the menu reopens on the session just chosen
+  // (owner, 2026-11-29) — and stays open, searching prose, while words are typed after the chip.
+  const isChip = Object.entries(refs).some(([title, ref]) => sigilOf(ref.kind) === sigil && token.startsWith(title));
+  return isChip ? null : token;
 }
 
 /**

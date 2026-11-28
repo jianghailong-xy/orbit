@@ -1136,6 +1136,9 @@ describe('@ sessions and # projects in the composer (docs/composer-references-de
     expect(row.querySelector('.composer-ref-state')?.textContent).toBe('Failed');
     await key('Enter');
     expect(field().value).toBe('compare with @Deploy main to staging ');
+    // Picking closes the menu: the chip just inserted is not a new search.
+    await settle();
+    expect(document.querySelector('.composer-ref-menu')).toBeNull();
     await type(`${field().value}please`);
     await press(byLabel('Send'));
     expect(sent()?.content).toBe('compare with [Deploy main to staging](orbit-session:S2) please');
